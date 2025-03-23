@@ -15,6 +15,8 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+
+import http.server
 import socketserver
 import subprocess
 import sys
@@ -67,45 +69,42 @@ HOST = ''
 PORT = 2400
 
 ############################################################################
-'''  One instance per connection.
-     Override handle(self) to customize action. '''
 
-class TCPConnectionHandler(socketserver.BaseRequestHandler):
-    def handle(self):
+class MyHandler(http.server.BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+    def do_GET(self):
         global actual_windspeed_msec
         self.event = threading.Event()
         events.append(self.event)
+        print(self.client_address)
+
+        self.send_response(200)
+        self.send_header('transfer-encoding', 'chunked')
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
         while 1:
             self.event.wait()
             self.event.clear()
             try:
-                self.request.sendall('{"windspeed": %f, "time": "%s"}' % (actual_windspeed_msec,time.strftime('%X %x %Z')))
-            except:
+                text = '{"windspeed": %f, "time": "%s"}\n' % (actual_windspeed_msec,time.strftime('%X %x %Z'))
+                chunk = '{0:x}\r\n'.format(len(text)) + text + '\r\n'
+                self.wfile.write(chunk.encode(encoding='utf-8'))
+                #self.wfile.flush()
+            except Exception as e:
+                print(e)
                 break
+
         events.remove(self.event)
 
 ############################################################################
 
-class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    # Ctrl-C will cleanly kill all spawned threads
-    daemon_threads = True
-    # much faster rebinding
-    allow_reuse_address = True
-
-    def __init__(self, server_address, RequestHandlerClass):
-        socketserver.TCPServer.__init__(\
-        self,\
-        server_address,\
-        RequestHandlerClass)
-
-############################################################################
-
 if __name__ == "__main__":
-    server = Server((HOST, PORT), TCPConnectionHandler)
+    server = http.server.ThreadingHTTPServer((HOST, PORT), MyHandler)
     # terminate with Ctrl-C
     try:
         server.serve_forever()
     except KeyboardInterrupt:
+        server.socket.close()
         sys.exit(0)
 
 ############################################################################
