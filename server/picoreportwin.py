@@ -5,15 +5,13 @@ import os
 import time
 import socket
 import sys
-import traceback
 import wifi
 
-import threading
 from _thread import start_new_thread
 from machine import Pin
 
 from nodeinfo import nodeinfo
-from windsensorserver import RingBuffer, interrupt, threadeval, getval600
+from windsensor import RingBuffer, interrupt, threadeval, getval600
 
 # wait until we have an IP
 i = 1
@@ -34,13 +32,24 @@ if i == 30:
 if not net:
   print("NO Network!")
 
+mywifi = wifi.Picow()
+try:
+    mywifi.connectwifi()
+except Exception as e:
+    print("exception in connectwifi()")
+    print(str(e))
+    time.sleep(10)
+    machine.reset()
+
 myinfo = nodeinfo()
-if myinfo.read():
+if myinfo.read(mywifi):
   # Use some default values
   print("myinfo.read() Failed!")
   myinfo.TIME_ACTIVE = 0
   myinfo.WAIT_TIME = 120
   myinfo.MAINT_MODE = False
+else:
+  print("Connected")
 
 # prepare the wind logic
 PINSENSOR=22
@@ -57,9 +66,7 @@ if net:
       mess = getval600()
       mess = bytes(mess, 'utf-8')
       url = "/webdav/" + myinfo.REMOTE_DIR + "/wind.txt"
-      mywifi = wifi.wifi()
-      mywifi.sendserver(mess, url, myinfo.machine, 443, myinfo.login, myinfo.password)
+      mywifi.sendserver(mess, url)
     except Exception as ex:
       print("Send Wind to web failed")
       print(str(ex))
-      traceback.print_exception(type(ex), ex, ex.__traceback__)
