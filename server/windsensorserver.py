@@ -22,7 +22,6 @@ import subprocess
 import sys
 import threading
 from _thread import start_new_thread
-import time
 import RPi.GPIO as GPIO
 import math
 import time
@@ -55,15 +54,6 @@ class RingBuffer:
         values = sorted(list(self.buffer))
         return values[0]
 
-
-PINSENSOR=37
-
-# RPi.GPIO Layout verwenden (wie Pin-Nummern)
-GPIO.setmode(GPIO.BOARD)
-
-# Pin 37 (GPIO 26) auf Input setzen
-GPIO.setup(PINSENSOR, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
 imp_per_sec = 0
 actual_windspeed_msec = 0
 events = []
@@ -72,8 +62,6 @@ rb = RingBuffer(600) # 10 minutes buffer
 def interrupt(val):
         global imp_per_sec
         imp_per_sec += 1
-
-GPIO.add_event_detect(PINSENSOR, GPIO.RISING, callback = interrupt, bouncetime = 5)
 
 def ws100_imp_to_mpersec(val):
         #y = 8E-09x5 - 2E-06x4 + 0,0002x3 - 0,0073x2 + 0,4503x + 0,11
@@ -90,7 +78,7 @@ def threadeval():
         global rb
         while 1:
                 actual_windspeed_msec = ws100_imp_to_mpersec(imp_per_sec)
-                #print("actual_windspeed_msec %f" % actual_windspeed_msec)
+                # print("actual_windspeed_msec %f" % actual_windspeed_msec)
                 imp_per_sec = 0
                 rb.add(int(round(actual_windspeed_msec)))
                 for x in events:
@@ -108,11 +96,13 @@ def threadeval600():
                 print("sec600_windspeed_msec max %d" % rb.max)
                 print("sec600_windspeed_msec min %d" % rb.min)
 
-start_new_thread(threadeval, ())
-start_new_thread(threadeval600, ())
-
-HOST = ''
-PORT = 2400
+# report the value for the server
+def getval600():
+        global imp_per_sec
+        global actual_windspeed_msec
+        global rb
+        mess = 'windspeed: %d %d %d' % (rb.max, rb.median, rb.min)
+        return mess
 
 ############################################################################
 
@@ -145,6 +135,28 @@ class MyHandler(http.server.BaseHTTPRequestHandler):
 ############################################################################
 
 if __name__ == "__main__":
+    PINSENSOR=37
+
+    # RPi.GPIO Layout verwenden (wie Pin-Nummern)
+    GPIO.setmode(GPIO.BOARD)
+
+    # Pin 37 (GPIO 26) auf Input setzen
+    GPIO.setup(PINSENSOR, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+    imp_per_sec = 0
+    actual_windspeed_msec = 0
+    events = []
+    rb = RingBuffer(600) # 10 minutes buffer
+
+    GPIO.add_event_detect(PINSENSOR, GPIO.RISING, callback = interrupt, bouncetime = 5)
+
+    start_new_thread(threadeval, ())
+    start_new_thread(threadeval600, ())
+
+    HOST = ''
+    PORT = 2400
+
+
     server = http.server.ThreadingHTTPServer((HOST, PORT), MyHandler)
     # terminate with Ctrl-C
     try:
