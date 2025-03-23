@@ -8,7 +8,7 @@ UI:
 -------------
 this folder contains the nodejs files. It runs a webserver, handles websockets for realtime data transmission, creates a database and acts as TCP/IP client to receive data from the python script.
 
-server:
+server: (modified to use chunk a tested with curl)
 -------------------
 this folder contains the python files. It samples the frequency on RaspberryPI pin3 and converts it to the actual windspeed. This script runs a TCP/IP server on port 2400. Every connected TCP/IP client receives the current wind speed once a second.
 
