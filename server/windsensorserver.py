@@ -27,6 +27,35 @@ import RPi.GPIO as GPIO
 import math
 import time
 
+# ring buffer to be able to report max med min in x minutes interval
+class RingBuffer:
+
+    def __init__(self, size: int):
+        self.buffer =  [1] * size
+        self.pos = 0
+
+    def add(self, value: int):
+        if self.pos >= len(self.buffer):
+            self.pos = 0
+        self.buffer[self.pos] = value
+        self.pos += 1
+
+    @property
+    def median(self) -> int:
+        values = sorted(list(self.buffer))
+        return values[round(len(values) * 0.5)] # not really the medium value but the one in middle of the sorted value.
+
+    @property
+    def max(self) -> int:
+        values = sorted(list(self.buffer))
+        return values[len(values)-1]
+
+    @property
+    def min(self) -> int:
+        values = sorted(list(self.buffer))
+        return values[0]
+
+
 PINSENSOR=37
 
 # RPi.GPIO Layout verwenden (wie Pin-Nummern)
@@ -38,6 +67,8 @@ GPIO.setup(PINSENSOR, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 imp_per_sec = 0
 actual_windspeed_msec = 0
 events = []
+rb = RingBuffer(600) # 10 minutes buffer
+
 def interrupt(val):
         global imp_per_sec
         imp_per_sec += 1
@@ -52,18 +83,33 @@ def ws100_imp_to_mpersec(val):
                 y = 0
         return y
 
+# calcul the value every sec (so we have m/s)
 def threadeval():
         global imp_per_sec
         global actual_windspeed_msec
+        global rb
         while 1:
                 actual_windspeed_msec = ws100_imp_to_mpersec(imp_per_sec)
-                print("actual_windspeed_msec %f" % actual_windspeed_msec)
+                #print("actual_windspeed_msec %f" % actual_windspeed_msec)
                 imp_per_sec = 0
+                rb.add(int(round(actual_windspeed_msec)))
                 for x in events:
                     x.set()
                 time.sleep(1)
 
+# calcul 600 sec max, med and min values
+def threadeval600():
+        global imp_per_sec
+        global actual_windspeed_msec
+        global rb
+        while 1:
+                time.sleep(600)
+                print("sec600_windspeed_msec med %d" % rb.median)
+                print("sec600_windspeed_msec max %d" % rb.max)
+                print("sec600_windspeed_msec min %d" % rb.min)
+
 start_new_thread(threadeval, ())
+start_new_thread(threadeval600, ())
 
 HOST = ''
 PORT = 2400
